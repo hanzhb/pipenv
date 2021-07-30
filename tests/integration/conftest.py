@@ -26,7 +26,7 @@ from pipenv.vendor.vistir.compat import (
     FileNotFoundError, PermissionError, ResourceWarning, TemporaryDirectory,
     fs_encode, fs_str
 )
-from pipenv.vendor.vistir.contextmanagers import cd, temp_environ
+from pipenv.vendor.vistir.contextmanagers import temp_environ
 from pipenv.vendor.vistir.misc import run
 from pipenv.vendor.vistir.path import (
     create_tracked_tempdir, handle_remove_readonly, mkdir_p
@@ -391,8 +391,7 @@ class _PipenvInstance:
         with TemporaryDirectory(prefix='pipenv-', suffix='-cache') as tempdir:
             cmd_args = shlex.split(cmd)
             env = {**self.env, **{'PIPENV_CACHE_DIR': tempdir.name}}
-            with cd(os.path.abspath(self.path)):
-                r = cli_runner.invoke(cli, cmd_args, env=env)
+            r = cli_runner.invoke(cli, cmd_args, env=env)
 
         c = CompletedProcess(["pipenv"] + cmd_args, r.exit_code, r.stdout, r.stderr)
         # Pretty output for failing tests.

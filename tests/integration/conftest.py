@@ -2,8 +2,9 @@ import errno
 import json
 import logging
 import os
-from pipenv.utils import subprocess_run
+import shlex
 import shutil
+from subprocess import CompletedProcess
 import sys
 import warnings
 
@@ -12,24 +13,29 @@ from shutil import rmtree as _rmtree
 import pytest
 import requests
 
+from click.testing import CliRunner
+from pytest_pypi.app import prepare_fixtures
+from pytest_pypi.app import prepare_packages as prepare_pypi_packages
+
 from pipenv._compat import Path
+from pipenv.cli import cli
 from pipenv.exceptions import VirtualenvActivationException
+from pipenv.utils import subprocess_run
 from pipenv.vendor import toml, tomlkit
 from pipenv.vendor.vistir.compat import (
     FileNotFoundError, PermissionError, ResourceWarning, TemporaryDirectory,
     fs_encode, fs_str
 )
-from pipenv.vendor.vistir.contextmanagers import temp_environ
+from pipenv.vendor.vistir.contextmanagers import cd, temp_environ
 from pipenv.vendor.vistir.misc import run
 from pipenv.vendor.vistir.path import (
     create_tracked_tempdir, handle_remove_readonly, mkdir_p
 )
-from pytest_pypi.app import prepare_fixtures
-from pytest_pypi.app import prepare_packages as prepare_pypi_packages
 
 
 log = logging.getLogger(__name__)
 warnings.simplefilter("default", category=ResourceWarning)
+cli_runner = CliRunner(mix_stderr=False)
 
 
 HAS_WARNED_GITHUB = False
@@ -303,20 +309,21 @@ class _PipenvInstance:
     ):
         self.index_url = os.getenv("PIPENV_TEST_INDEX")
         self.pypi = None
+        self.env = {}
         if pypi:
             self.pypi = pypi.url
         elif self.index_url is not None:
             self.pypi, _, _ = self.index_url.rpartition("/") if self.index_url else ""
         self.index = os.getenv("PIPENV_PYPI_INDEX")
-        os.environ["PYTHONWARNINGS"] = "ignore:DEPRECATION"
+        self.env["PYTHONWARNINGS"] = "ignore:DEPRECATION"
         if ignore_virtualenvs:
-            os.environ["PIPENV_IGNORE_VIRTUALENVS"] = fs_str("1")
+            self.env["PIPENV_IGNORE_VIRTUALENVS"] = fs_str("1")
         if venv_root:
-            os.environ["VIRTUAL_ENV"] = venv_root
+            self.env["VIRTUAL_ENV"] = venv_root
         if venv_in_project:
-            os.environ["PIPENV_VENV_IN_PROJECT"] = fs_str("1")
+            self.env["PIPENV_VENV_IN_PROJECT"] = fs_str("1")
         else:
-            os.environ.pop("PIPENV_VENV_IN_PROJECT", None)
+            self.env.pop("PIPENV_VENV_IN_PROJECT", None)
 
         self.original_dir = os.path.abspath(os.curdir)
         path = path if path else os.environ.get("PIPENV_PROJECT_DIR", None)
@@ -346,7 +353,7 @@ class _PipenvInstance:
         self.chdir = chdir
 
         if self.pypi and "PIPENV_PYPI_URL" not in os.environ:
-            os.environ['PIPENV_PYPI_URL'] = fs_str(f'{self.pypi}')
+            self.env['PIPENV_PYPI_URL'] = fs_str(f'{self.pypi}')
             # os.environ['PIPENV_PYPI_URL'] = fs_str('{0}'.format(self.pypi.url))
             # os.environ['PIPENV_TEST_INDEX'] = fs_str('{0}/simple'.format(self.pypi.url))
 
@@ -382,17 +389,12 @@ class _PipenvInstance:
         # a bit of a hack to make sure the virtualenv is created
 
         with TemporaryDirectory(prefix='pipenv-', suffix='-cache') as tempdir:
-            os.environ['PIPENV_CACHE_DIR'] = fs_str(tempdir.name)
-            c = subprocess_run(
-                f'pipenv {cmd}', block=block, shell=True,
-                cwd=os.path.abspath(self.path), env=os.environ.copy()
-            )
-            if 'PIPENV_CACHE_DIR' in os.environ:
-                del os.environ['PIPENV_CACHE_DIR']
+            cmd_args = shlex.split(cmd)
+            env = {**self.env, **{'PIPENV_CACHE_DIR': tempdir.name}}
+            with cd(os.path.abspath(self.path)):
+                r = cli_runner.invoke(cli, cmd_args, env=env)
 
-        if 'PIPENV_PIPFILE' in os.environ:
-            del os.environ['PIPENV_PIPFILE']
-
+        c = CompletedProcess(["pipenv"] + cmd_args, r.exit_code, r.stdout, r.stderr)
         # Pretty output for failing tests.
         if block:
             print(f'$ pipenv {cmd}')

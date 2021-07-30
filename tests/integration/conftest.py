@@ -325,7 +325,7 @@ class _PipenvInstance:
         else:
             self.env.pop("PIPENV_VENV_IN_PROJECT", None)
 
-        self.original_dir = os.path.abspath(os.curdir)
+        self.original_dir = Path(__file__).parent.parent.parent
         path = path if path else os.environ.get("PIPENV_PROJECT_DIR", None)
         if name is not None:
             path = Path(os.environ["HOME"]) / "projects" / name

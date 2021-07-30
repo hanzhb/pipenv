@@ -671,7 +671,7 @@ def batch_install(project, deps_list, procs, failed_deps_queue,
     failed = (not retry)
     install_deps = not no_deps
     if not failed:
-        label = INSTALL_LABEL if not project.s.PIPENV_HIDE_EMOJIS else ""
+        label = INSTALL_LABEL if not environments.PIPENV_HIDE_EMOJIS else ""
     else:
         label = INSTALL_LABEL2
 

@@ -580,7 +580,7 @@ class Environment:
     def dist_is_in_project(self, dist):
         # type: (pkg_resources.Distribution) -> bool
         """Determine whether the supplied distribution is in the environment."""
-        from .project import _normalized
+        from .environments import normalize_pipfile_path as _normalized
         prefixes = [
             _normalized(prefix) for prefix in self.base_paths["libdirs"].split(os.pathsep)
             if _normalized(prefix).startswith(_normalized(self.prefix.as_posix()))
